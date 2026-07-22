@@ -9,8 +9,9 @@ const SHIKI_BASE = 'https://shikimori.one';
 
 // Shikimori doesn't send Access-Control-Allow-Origin, so the browser blocks
 // direct fetches from a different domain (see console: "blocked by CORS
-// policy"). We route through a public CORS proxy that just adds that header.
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+// policy"). We route through a small Cloudflare Worker we control, which
+// adds that header and sets a proper User-Agent (Shikimori requires one).
+const CORS_PROXY = 'https://sweet-cherry-8a30.nedewlos.workers.dev/?url=';
 
 function kodikToken(){
   return localStorage.getItem('seans_kodik_token') || '';
