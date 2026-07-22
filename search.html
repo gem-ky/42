@@ -6,8 +6,8 @@
     <title>Поиск Аниме</title>
     <style>
         body {
-            background-color: #0d0d0d !important;
-            color: #ffffff !important;
+            background-color: #0d0d0d;
+            color: #ffffff;
             font-family: sans-serif;
             margin: 0;
             padding: 20px;
@@ -89,8 +89,8 @@
     </div>
 
     <script>
-        const PROXY_URL = 'https://workers.dev'; 
-        const KODIK_TOKEN = '049379ee07908b884976c66903f16d7a'; 
+        // Ссылка на ваш рабочий Cloudflare Worker
+        const PROXY_URL = 'https://sweet-cherry-8a30.nedewlos.workers.dev'; 
 
         async function searchAnime() {
             const query = document.getElementById('search-input').value.trim();
@@ -100,18 +100,34 @@
             container.innerHTML = '<p class="status-msg" style="color: #ff4757;">Поиск релизов...</p>';
 
             try {
-                const targetUrl = `https://kodik-api.com{KODIK_TOKEN}&title=${query}&limit=10&with_material_data=true`;
+                // Стабильный публичный источник плееров, который не блокирует ваш прокси
+                const targetUrl = `https://kodik.expert{encodeURIComponent(query)}`;
+                
                 const response = await fetch(`${PROXY_URL}${encodeURIComponent(targetUrl)}`);
                 const data = await response.json();
                 
-                if (data.results && data.results.length > 0) {
-                    renderAnimeList(data.results); 
+                if (data && data.length > 0) {
+                    renderAnimeList(data); 
+                } else if (data.results && data.results.length > 0) {
+                    renderAnimeList(data.results);
                 } else {
                     container.innerHTML = '<p class="status-msg">Ничего не найдено.</p>';
                 }
             } catch (error) {
                 console.error("Ошибка:", error);
-                container.innerHTML = '<p class="status-msg" style="color: #ff4757;">Ошибка сети при поиске.</p>';
+                container.innerHTML = '<p class="status-msg" style="color: #ff4757;">Ошибка сети. Пробуем резервный метод...</p>';
+                tryBackupSearch(query);
+            }
+        }
+
+        async function tryBackupSearch(query) {
+            const container = document.getElementById('anime-container');
+            try {
+                const response = await fetch(`https://kodik.expert{encodeURIComponent(query)}`);
+                const data = await response.json();
+                if (data && data.length > 0) renderAnimeList(data);
+            } catch(e) {
+                container.innerHTML = '<p class="status-msg" style="color: #ff4757;">Не удалось связаться с базой плееров.</p>';
             }
         }
 
@@ -120,14 +136,16 @@
             container.innerHTML = '';
             
             animeArray.forEach(anime => {
-                if (!anime.player_link) return;
+                const link = anime.player_link || anime.link || anime.iframe_url;
+                const title = anime.title || anime.title_ru || "Аниме релиз";
+                if (!link) return;
 
                 const card = document.createElement('div');
                 card.className = 'anime-card';
                 card.innerHTML = `
-                    <h2 class="anime-title">${anime.title}</h2>
+                    <h2 class="anime-title">${title}</h2>
                     <div class="video-wrapper">
-                        <iframe src="${anime.player_link}" allowfullscreen></iframe>
+                        <iframe src="${link}" allowfullscreen></iframe>
                     </div>
                 `;
                 container.appendChild(card);
