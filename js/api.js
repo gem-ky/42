@@ -7,12 +7,18 @@
 
 const SHIKI_BASE = 'https://shikimori.one';
 
+// Shikimori doesn't send Access-Control-Allow-Origin, so the browser blocks
+// direct fetches from a different domain (see console: "blocked by CORS
+// policy"). We route through a public CORS proxy that just adds that header.
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
 function kodikToken(){
   return localStorage.getItem('seans_kodik_token') || '';
 }
 
 async function shikiFetch(path){
-  const res = await fetch(SHIKI_BASE + path);
+  const target = SHIKI_BASE + path;
+  const res = await fetch(CORS_PROXY + encodeURIComponent(target));
   if(!res.ok) throw new Error('Shikimori API error: ' + res.status);
   return res.json();
 }
@@ -59,7 +65,15 @@ const Kodik = {
       shikimori_id: shikimoriId,
       with_episodes: 'true'
     });
-    const res = await fetch(`https://kodikapi.com/search?${params.toString()}`);
+    const target = `https://kodikapi.com/search?${params.toString()}`;
+    let res;
+    try{
+      // try direct first — Kodik's API is built for client widgets and may allow CORS
+      res = await fetch(target);
+      if(!res.ok) throw new Error('direct failed');
+    }catch(e){
+      res = await fetch(CORS_PROXY + encodeURIComponent(target));
+    }
     if(!res.ok) throw new Error('Kodik API error: ' + res.status);
     const data = await res.json();
     return data.results || [];
