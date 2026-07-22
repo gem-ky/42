@@ -1,4 +1,4 @@
-const CACHE = 'seans-shell-v1';
+const CACHE = 'seans-shell-v2';
 const SHELL = [
   './',
   './index.html',
