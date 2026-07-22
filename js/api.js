@@ -127,5 +127,15 @@ const Library = {
     return Object.entries(hist)
       .map(([id, v]) => ({ id, ...v }))
       .sort((a,b) => b.at - a.at);
+  },
+
+  manualLink(animeId, episode){
+    const links = this._read('seans_manual_links');
+    return links[`${animeId}:${episode}`] || '';
+  },
+  setManualLink(animeId, episode, url){
+    const links = this._read('seans_manual_links');
+    links[`${animeId}:${episode}`] = url;
+    this._write('seans_manual_links', links);
   }
 };
