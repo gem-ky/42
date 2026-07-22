@@ -48,63 +48,113 @@ function setEpisodeParam(n){
 async function main(){
   if(!id){ content.innerHTML = `<div class="notice">Тайтл не указан.</div>`; return; }
 
-  if(!Kodik.hasToken()){
-    content.innerHTML = `
-      <div class="notice" style="margin-top:36px;">
-        Чтобы смотреть, нужен личный API-токен Kodik. Добавь его на странице
-        <a href="settings.html">Настройки</a> — это займёт минуту, токен выдают бесплатно.
-      </div>`;
+  const anime = await Shiki.byId(id).catch(()=>null);
+  const title = anime ? (anime.russian || anime.name) : ('Тайтл #' + id);
+  const episodesTotal = anime ? (anime.episodes || anime.episodes_aired || 1) : 1;
+
+  const manualUrl = Library.manualLink(id, ep);
+
+  // manual link takes priority — works with zero external API dependency
+  if(manualUrl){
+    renderPlayer(title, episodesTotal, manualUrl, true);
+    Library.markWatched(id, ep, anime ? { russian: anime.russian, name: anime.name, image: anime.image } : null);
     return;
   }
 
-  let anime, sources;
+  if(!Kodik.hasToken()){
+    content.innerHTML = `
+      <h1 class="detail-title" style="margin-top:32px;">${escapeHtml(title)}</h1>
+      <div class="notice">
+        Чтобы смотреть через Kodik, нужен личный API-токен (страница <a href="settings.html">Настройки</a>).
+        Либо укажи свою ссылку на плеер прямо здесь, без токена:
+      </div>
+      ${manualLinkForm()}`;
+    wireManualLinkForm(title, episodesTotal);
+    return;
+  }
+
+  let sources;
   try{
-    [anime, sources] = await Promise.all([ Shiki.byId(id), Kodik.findByShikimoriId(id) ]);
+    sources = await Kodik.findByShikimoriId(id);
   }catch(e){
-    content.innerHTML = `<div class="notice">Не удалось получить данные. Проверь токен Kodik в настройках и подключение к сети.</div>`;
+    content.innerHTML = `
+      <h1 class="detail-title" style="margin-top:32px;">${escapeHtml(title)}</h1>
+      <div class="notice">Не удалось получить данные от Kodik. Можно указать свою ссылку на плеер вместо этого:</div>
+      ${manualLinkForm()}`;
+    wireManualLinkForm(title, episodesTotal);
     console.error(e);
     return;
   }
 
   if(!sources.length){
     content.innerHTML = `
-      <h1 class="detail-title" style="margin-top:32px;">${escapeHtml(anime.russian || anime.name)}</h1>
-      <div class="notice">По этому тайтлу источников на Kodik не нашлось.</div>`;
+      <h1 class="detail-title" style="margin-top:32px;">${escapeHtml(title)}</h1>
+      <div class="notice">По этому тайтлу источников на Kodik не нашлось. Можно указать свою ссылку на плеер:</div>
+      ${manualLinkForm()}`;
+    wireManualLinkForm(title, episodesTotal);
     return;
   }
 
   const result = sources[0];
-  const episodesTotal = anime.episodes || anime.episodes_aired || 1;
   const embed = Kodik.embedUrl(result, ep);
+  renderPlayer(title, episodesTotal, embed, false, result);
+  Library.markWatched(id, ep, { russian: anime.russian, name: anime.name, image: anime.image });
+}
 
+function manualLinkForm(){
+  return `
+    <div class="form-row" style="margin-top:18px;">
+      <label for="manualLinkInput">Ссылка на iframe-плеер для серии ${ep}</label>
+      <input type="text" id="manualLinkInput" placeholder="https://...">
+      <div class="form-hint">Вставь адрес из атрибута src чужого видео-плеера (iframe). Сохранится только в этом браузере, отдельно для каждой серии.</div>
+    </div>
+    <button class="btn btn-primary" id="manualLinkSave">Сохранить и смотреть</button>`;
+}
+
+function wireManualLinkForm(title, episodesTotal){
+  document.getElementById('manualLinkSave').onclick = () => {
+    const val = document.getElementById('manualLinkInput').value.trim();
+    if(!val) return;
+    Library.setManualLink(id, ep, val);
+    renderPlayer(title, episodesTotal, val, true);
+    Library.markWatched(id, ep, null);
+  };
+}
+
+function renderPlayer(title, episodesTotal, embed, isManual, result){
   let pills = '';
   for(let n=1; n<=episodesTotal; n++){
     pills += `<span class="ep-pill ${n===ep?'active':''}" data-ep="${n}">${n}</span>`;
   }
 
   content.innerHTML = `
-    <div class="eyebrow" style="margin-top:32px;">${escapeHtml(anime.russian || anime.name)} · серия ${ep}</div>
+    <div class="eyebrow" style="margin-top:32px;">${escapeHtml(title)} · серия ${ep}${isManual ? ' · своя ссылка' : ''}</div>
     <div class="player-shell">
       <iframe id="playerFrame" src="${embed}" allow="autoplay; fullscreen" allowfullscreen></iframe>
     </div>
     <div class="player-bar">
       <div class="ep-switcher" id="epSwitcher">${pills}</div>
-      <a class="btn btn-ghost" href="anime.html?id=${anime.id}">К описанию</a>
+      <div style="display:flex; gap:10px;">
+        ${isManual ? `<button class="btn btn-ghost" id="changeManualLink">Заменить ссылку</button>` : ''}
+        <a class="btn btn-ghost" href="anime.html?id=${id}">К описанию</a>
+      </div>
     </div>
   `;
-
-  Library.markWatched(anime.id, ep, { russian: anime.russian, name: anime.name, image: anime.image });
 
   document.getElementById('epSwitcher').addEventListener('click', e=>{
     const pill = e.target.closest('.ep-pill');
     if(!pill) return;
-    ep = parseInt(pill.dataset.ep, 10);
-    setEpisodeParam(ep);
-    document.getElementById('playerFrame').src = Kodik.embedUrl(result, ep);
-    document.querySelectorAll('.ep-pill').forEach(p=>p.classList.toggle('active', p===pill));
-    document.querySelector('.eyebrow').textContent = `${anime.russian || anime.name} · серия ${ep}`;
-    Library.markWatched(anime.id, ep, { russian: anime.russian, name: anime.name, image: anime.image });
+    const n = parseInt(pill.dataset.ep, 10);
+    setEpisodeParam(n);
+    location.reload();
   });
+
+  if(isManual){
+    document.getElementById('changeManualLink').onclick = () => {
+      content.insertAdjacentHTML('beforeend', manualLinkForm());
+      wireManualLinkForm(title, episodesTotal);
+    };
+  }
 }
 main();
 </script>
